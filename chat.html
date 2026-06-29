@@ -174,6 +174,13 @@
     function initChat() {
         var PCC = window.PCC;
 
+        // Verify Firebase Auth state — redirect to login if unauthenticated
+        PCC.onAuthStateChanged(PCC.auth, function(user) {
+            if (!user) {
+                doLogout();
+            }
+        });
+
         // Set my online status in Firestore
         function setOnline(val) {
             PCC.setDoc(PCC.doc(PCC.db, 'users', ME),
@@ -368,7 +375,15 @@
     function doLogout() {
         sessionStorage.removeItem('pcc_user');
         localStorage.removeItem('pcc_user');
-        window.location.replace('login.html');
+        if (window.PCC && window.PCC.signOut) {
+            window.PCC.signOut(window.PCC.auth)
+                .catch(function(){})
+                .finally(function() {
+                    window.location.replace('login.html');
+                });
+        } else {
+            window.location.replace('login.html');
+        }
     }
 
     // ── Notification sound ────────────────────────────────────────────────
