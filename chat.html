@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en" id="htmlRoot">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agriculture</title>
+    <link rel="icon" type="image/png" href="assets/logo.png">
+    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/chat.css">
+</head>
+<body>
+    <div class="glass-panel chat-page-container">
+
+        <!-- Sidebar -->
+        <aside class="chat-sidebar">
+            <div class="partner-profile">
+                <div class="partner-avatar-wrapper">
+                    <img id="sidebarAvatar" src="assets/logo.png" alt="Partner" class="partner-avatar">
+                    <span id="sidebarStatusBadge" class="status-badge"></span>
+                </div>
+                <h2 id="sidebarPartnerName">Your Love</h2>
+                <p id="sidebarPartnerStatusText">Offline</p>
+            </div>
+            <div class="couple-stats">
+                <div class="stat-card">
+                    <h4>Love Counter</h4>
+                    <p id="loveCounter">0 Days</p>
+                </div>
+                <div class="stat-card">
+                    <h4>Messages</h4>
+                    <p id="messagesExchanged">0</p>
+                </div>
+                <div class="stat-card">
+                    <h4>Security</h4>
+                    <p style="font-size:.9rem;color:var(--success);display:flex;align-items:center;justify-content:center;gap:4px">
+                        <i class="bx bxs-lock-alt"></i> Private & Safe
+                    </p>
+                </div>
+            </div>
+            <div class="sidebar-footer">
+                <button id="themeToggleBtn" class="btn-sidebar-action">
+                    <i class="bx bx-sun" id="themeIcon"></i>
+                    <span>Light Mode</span>
+                </button>
+                <button id="logoutBtn" class="btn-logout-big">
+                    <i class="bx bx-log-out"></i>
+                    <span>Logout</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Chat -->
+        <main class="chat-main">
+            <header class="chat-header">
+                <div class="chat-header-info">
+                    <img id="headerAvatar" src="assets/logo.png" alt="Partner" class="chat-header-avatar">
+                    <div class="chat-header-text" id="headerTextContainer">
+                        <h3 id="headerPartnerName">Your Partner</h3>
+                        <p id="headerPartnerStatus">offline</p>
+                    </div>
+                </div>
+                <div class="chat-header-actions">
+                    <button id="mobileThemeToggleBtn" class="btn-header-action" title="Theme">
+                        <i class="bx bx-sun" id="mobileThemeIcon"></i>
+                    </button>
+                    <button id="mobileLogoutBtn" class="btn-header-action btn-header-logout" title="Logout">
+                        <i class="bx bx-log-out"></i>
+                    </button>
+                </div>
+            </header>
+
+            <section class="chat-messages-container" id="messagesContainer">
+                <div class="chat-messages-wrapper" id="messagesList"></div>
+            </section>
+
+            <div id="typingIndicator" class="typing-indicator-container" style="display:none">
+                <div class="typing-dots">
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                </div>
+                <span class="typing-indicator-text" id="typingText">typing...</span>
+            </div>
+
+            <footer class="chat-footer">
+                <div class="chat-input-wrapper">
+                    <input type="text" id="messageInput" class="chat-input"
+                        placeholder="Type a message..." autocomplete="off" maxlength="1000">
+                    <button id="emojiBtn" class="btn-emoji-trigger">
+                        <i class="bx bx-smile"></i>
+                    </button>
+                </div>
+                <button id="sendBtn" class="btn-send">
+                    <i class="bx bx-send"></i>
+                </button>
+                <div id="emojiDrawer" class="emoji-drawer glass-panel">
+                    <div class="emoji-drawer-header" id="emojiTabs">
+                        <button class="emoji-tab active" data-cat="recent">❤️</button>
+                        <button class="emoji-tab" data-cat="smileys">😊</button>
+                        <button class="emoji-tab" data-cat="animals">🐱</button>
+                        <button class="emoji-tab" data-cat="food">🍓</button>
+                        <button class="emoji-tab" data-cat="activities">🎉</button>
+                    </div>
+                    <div class="emoji-grid" id="emojiGrid"></div>
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <audio id="notificationSound" src="assets/sounds/notification.wav" preload="auto"></audio>
+
+    <script>
+    var _rawUser = sessionStorage.getItem('pcc_user') || localStorage.getItem('pcc_user');
+    if (!_rawUser) {
+        window.location.replace('login.html');
+    }
+
+    var SESSION  = JSON.parse(_rawUser);
+    var ME       = SESSION.username;
+    var PARTNER  = ME === 'vaishnav' ? 'chikku' : 'vaishnav';
+    var MY_NAME  = ME === 'vaishnav' ? 'Vaishnav' : 'Chikku';
+    var HER_NAME = ME === 'vaishnav' ? 'Chikku'   : 'Vaishnav';
+
+    var ANNIVERSARY = new Date(2024, 9, 12);
+
+    // ── Back Button Auto Logout ───────────────────────────────
+    history.pushState(null, null, location.href);
+    window.addEventListener('popstate', function () {
+        doLogout();
+    });
+
+    var EMOJIS = {
+        recent:     ['❤️','💖','🥰','😘','💕','✨','🌸','🧸','💑','💌','😍','🫦'],
+        smileys:    ['😊','😂','🤣','😍','🥰','😘','🤪','😎','🥺','😢','😭','😤','🤗','🤔','😳','😇','😈'],
+        animals:    ['🐶','🐱','🐰','🦊','🐻','🐼','🐨','🦁','🐮','🐸','🦋','🐝','🦄','🐙','🦀','🐬'],
+        food:       ['🍓','🍒','🍑','🥭','🍍','🍫','🍩','🎂','🧁','🍪','🍰','🍵','☕','🥤','🍹','🥂'],
+        activities: ['🎉','🎊','🎁','🎀','✨','🏆','🎭','🎨','🎬','🎤','🎧','🎹','🎸','🎮','💃']
+    };
+
+    function getMsgs()  { return JSON.parse(localStorage.getItem('pcc_messages') || '[]'); }
+    function getUsers() { return JSON.parse(localStorage.getItem('pcc_users')    || '{}'); }
+    function saveMsgs(m)  { localStorage.setItem('pcc_messages', JSON.stringify(m)); broadcast('messages'); }
+    function saveUsers(u) { localStorage.setItem('pcc_users',    JSON.stringify(u)); broadcast('users'); }
+
+    var _bc = null;
+    try {
+        _bc = new BroadcastChannel('pcc_sync');
+        _bc.onmessage = function(e) {
+            if (e.data === 'messages') renderMessages();
+            if (e.data === 'users')    refreshPartnerStatus();
+        };
+    } catch(_) {}
+
+    window.addEventListener('storage', function(e) {
+        if (e.key === 'pcc_messages') renderMessages();
+        if (e.key === 'pcc_users')    refreshPartnerStatus();
+    });
+
+    function broadcast(key) {
+        try { if(_bc) _bc.postMessage(key); } catch(_){}
+    }
+
+    (function() {
+        var users = getUsers();
+        users[ME] = { username: ME, online: true, lastSeen: new Date().toISOString(), typing: false };
+        saveUsers(users);
+    })();
+
+    var $ = function(id) { return document.getElementById(id); };
+    var msgContainer = $('messagesContainer');
+    var msgList      = $('messagesList');
+    var msgInput     = $('messageInput');
+    var sendBtn      = $('sendBtn');
+    var emojiBtn     = $('emojiBtn');
+    var emojiDrawer  = $('emojiDrawer');
+    var emojiGrid    = $('emojiGrid');
+    var emojiTabs    = $('emojiTabs');
+    var typingEl     = $('typingIndicator');
+    var typingText   = $('typingText');
+    var sidebarBadge = $('sidebarStatusBadge');
+    var sidebarName  = $('sidebarPartnerName');
+    var sidebarStat  = $('sidebarPartnerStatusText');
+    var loveCounter  = $('loveCounter');
+    var msgCount     = $('messagesExchanged');
+    var themeBtn     = $('themeToggleBtn');
+    var themeIcon    = $('themeIcon');
+    var mThemeBtn    = $('mobileThemeToggleBtn');
+    var mThemeIcon   = $('mobileThemeIcon');
+    var logoutBtn    = $('logoutBtn');
+    var mLogoutBtn   = $('mobileLogoutBtn');
+    var headerName   = $('headerPartnerName');
+    var headerStat   = $('headerPartnerStatus');
+    var headerText   = $('headerTextContainer');
+
+    sidebarName.textContent = headerName.textContent = HER_NAME;
+    var days = Math.ceil(Math.abs(new Date() - ANNIVERSARY) / 86400000);
+    loveCounter.textContent = days + ' Days';
+    setTheme(localStorage.getItem('pcc_theme') || 'dark');
+    setOnline(true);
+    renderMessages();
+    refreshPartnerStatus();
+    loadEmojis('recent');
+
+    setInterval(refreshPartnerStatus, 1000);
+    setInterval(renderMessages, 1000);
+    setInterval(function() { setOnline(true); }, 3000);
+
+    sendBtn.addEventListener('click', sendMessage);
+    msgInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    });
+    msgInput.addEventListener('input', handleTyping);
+
+    emojiBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        emojiDrawer.classList.toggle('active');
+    });
+    document.addEventListener('click', function(e) {
+        if (!emojiDrawer.contains(e.target) && e.target !== emojiBtn)
+            emojiDrawer.classList.remove('active');
+    });
+    emojiTabs.addEventListener('click', function(e) {
+        var tab = e.target.closest('.emoji-tab');
+        if (!tab) return;
+        document.querySelectorAll('.emoji-tab').forEach(function(t){ t.classList.remove('active'); });
+        tab.classList.add('active');
+        loadEmojis(tab.dataset.cat);
+    });
+
+    logoutBtn.addEventListener('click', doLogout);
+    mLogoutBtn.addEventListener('click', doLogout);
+    themeBtn.addEventListener('click', toggleTheme);
+    mThemeBtn.addEventListener('click', toggleTheme);
+
+    window.addEventListener('focus',  function() { setOnline(true);  markRead(); });
+    window.addEventListener('blur',   function() { stopTyping(); });
+    window.addEventListener('beforeunload', function() { setOnline(false); });
+
+    function sendMessage() {
+        var text = msgInput.value.trim();
+        if (!text) return;
+        msgInput.value = '';
+        stopTyping();
+
+        var msgs = getMsgs();
+        msgs.push({
+            id:        'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2,5),
+            text:      text,
+            sender:    ME,
+            timestamp: new Date().toISOString(),
+            read:      false,
+            readAt:    null
+        });
+        saveMsgs(msgs);
+        renderMessages();
+    }
+
+    function renderMessages() {
+        var msgs = getMsgs();
+        msgCount.textContent = msgs.length;
+
+        var now = Date.now();
+        var newPartnerMsg = false;
+        var addedAny = false;
+
+        msgs.forEach(function(msg) {
+            var existingNode = document.getElementById('msg-node-' + msg.id);
+            if (!existingNode) {
+                addedAny   = true;
+                var isSent = msg.sender === ME;
+                var row    = document.createElement('div');
+                row.id        = 'msg-node-' + msg.id;
+                row.className = 'message-row ' + (isSent ? 'sent' : 'received');
+
+                var bubble = document.createElement('div');
+                bubble.className = 'message-bubble animated-pop';
+
+                var textEl = document.createElement('span');
+                textEl.textContent = msg.text;
+                bubble.appendChild(textEl);
+
+                var meta = document.createElement('div');
+                meta.className = 'message-meta';
+
+                var timeEl = document.createElement('span');
+                var d = new Date(msg.timestamp);
+                timeEl.textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+                meta.appendChild(timeEl);
+
+                if (isSent) {
+                    var receipt = document.createElement('span');
+                    receipt.className = 'read-receipt';
+                    receipt.id        = 'rcpt-' + msg.id;
+                    receipt.innerHTML = msg.read
+                        ? '<i class="bx bx-check-double read" title="Read"></i>'
+                        : '<i class="bx bx-check" title="Sent"></i>';
+                    meta.appendChild(receipt);
+                }
+
+                bubble.appendChild(meta);
+                row.appendChild(bubble);
+                msgList.appendChild(row);
+
+                if (!isSent && !msg.read && (now - new Date(msg.timestamp).getTime()) < 4000) {
+                    newPartnerMsg = true;
+                }
+            } else {
+                if (msg.sender === ME) {
+                    var rcpt = document.getElementById('rcpt-' + msg.id);
+                    if (rcpt) {
+                        var expected = msg.read
+                            ? '<i class="bx bx-check-double read" title="Read"></i>'
+                            : '<i class="bx bx-check" title="Sent"></i>';
+                        if (rcpt.innerHTML !== expected) {
+                            rcpt.innerHTML = expected;
+                        }
+                    }
+                }
+            }
+        });
+
+        if (addedAny) {
+            scrollBottom();
+        }
+
+        if (newPartnerMsg) playSound();
+        markRead();
+    }
+
+    function markRead() {
+        var msgs    = getMsgs();
+        var changed = false;
+        msgs.forEach(function(m) {
+            if (m.sender === PARTNER && !m.read) {
+                m.read   = true;
+                m.readAt = new Date().toISOString();
+                changed  = true;
+            }
+        });
+        if (changed) saveMsgs(msgs);
+    }
+
+    var _typingTimer = null;
+    var _isTyping    = false;
+
+    function handleTyping() {
+        if (!_isTyping) { _isTyping = true; setTypingStatus(true); }
+        clearTimeout(_typingTimer);
+        _typingTimer = setTimeout(stopTyping, 2500);
+    }
+    function stopTyping() {
+        if (_isTyping) { _isTyping = false; clearTimeout(_typingTimer); setTypingStatus(false); }
+    }
+    function setTypingStatus(val) {
+        var users = getUsers();
+        if (users[ME]) { users[ME].typing = val; saveUsers(users); }
+    }
+
+    var _lastOnlineState = null;
+    var _lastTypingState = null;
+    function refreshPartnerStatus() {
+        var users  = getUsers();
+        var p      = users[PARTNER] || {};
+        var lastS  = p.lastSeen ? new Date(p.lastSeen).getTime() : 0;
+        var online = !!p.online && (Date.now() - lastS < 7000);
+
+        if (online !== _lastOnlineState) {
+            _lastOnlineState = online;
+            sidebarBadge.classList.toggle('online', online);
+            headerText.classList.toggle('online',   online);
+            var label = online ? 'Online' : formatLastSeen(p.lastSeen);
+            sidebarStat.textContent = label;
+            headerStat.textContent  = online ? 'online' : label;
+        }
+
+        if (p.typing !== _lastTypingState) {
+            _lastTypingState = p.typing;
+            typingEl.style.display = (p.typing && online) ? 'flex' : 'none';
+            if (p.typing) typingText.textContent = HER_NAME + ' is typing...';
+        }
+    }
+
+    function setOnline(val) {
+        var users = getUsers();
+        if (!users[ME]) users[ME] = { username: ME };
+        users[ME].online   = val;
+        users[ME].lastSeen = new Date().toISOString();
+        if (!val) users[ME].typing = false;
+        saveUsers(users);
+    }
+
+    function doLogout() {
+        setOnline(false);
+        sessionStorage.removeItem('pcc_user');
+        localStorage.removeItem('pcc_user');
+        window.location.replace('login.html');
+    }
+
+    var _soundPlayed = false;
+    function playSound() {
+        if (_soundPlayed) return;
+        var audio = $('notificationSound');
+        if (audio) {
+            audio.currentTime = 0;
+            audio.play().catch(synthSound);
+        } else { synthSound(); }
+        _soundPlayed = true;
+        setTimeout(function() { _soundPlayed = false; }, 2000);
+    }
+    function synthSound() {
+        try {
+            var Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return;
+            var ctx  = new Ctx();
+            var gain = ctx.createGain();
+            var o1   = ctx.createOscillator();
+            var o2   = ctx.createOscillator();
+            o1.frequency.value = 880;
+            o2.frequency.value = 1320;
+            gain.gain.setValueAtTime(0, ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+            o1.connect(gain); o2.connect(gain); gain.connect(ctx.destination);
+            o1.start(); o2.start();
+            o1.stop(ctx.currentTime + 0.4); o2.stop(ctx.currentTime + 0.4);
+        } catch(_) {}
+    }
+
+    function loadEmojis(cat) {
+        emojiGrid.innerHTML = '';
+        (EMOJIS[cat] || []).forEach(function(em) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'emoji-item';
+            btn.textContent = em;
+            btn.addEventListener('click', function() {
+                msgInput.value += em;
+                msgInput.focus();
+                handleTyping();
+            });
+            emojiGrid.appendChild(btn);
+        });
+    }
+
+    function toggleTheme() {
+        var cur = document.getElementById('htmlRoot').getAttribute('data-theme') || 'dark';
+        setTheme(cur === 'dark' ? 'light' : 'dark');
+    }
+    function setTheme(t) {
+        document.getElementById('htmlRoot').setAttribute('data-theme', t);
+        localStorage.setItem('pcc_theme', t);
+        var dark = (t === 'dark');
+        themeIcon.className  = dark ? 'bx bx-sun'  : 'bx bx-moon';
+        mThemeIcon.className = dark ? 'bx bx-sun'  : 'bx bx-moon';
+        themeBtn.querySelector('span').textContent = dark ? 'Light Mode' : 'Dark Mode';
+    }
+
+    function scrollBottom() { msgContainer.scrollTop = msgContainer.scrollHeight; }
+
+    function formatLastSeen(iso) {
+        if (!iso) return 'offline';
+        var d    = new Date(iso);
+        var now  = new Date();
+        var mins = Math.floor((now - d) / 60000);
+        if (mins < 1)  return 'just now';
+        if (mins < 60) return 'last seen ' + mins + 'm ago';
+        if (d.toDateString() === now.toDateString())
+            return 'last seen today at ' + d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit',hour12:true});
+        return 'last seen ' + d.toLocaleDateString([], {month:'short', day:'numeric'});
+    }
+    </script>
+</body>
+</html>

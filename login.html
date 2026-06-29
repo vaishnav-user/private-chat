@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agriculture</title>
+    <link rel="icon" type="image/png" href="assets/logo.png">
+    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="glass-panel login-container">
+        <div class="brand">
+            <div class="brand-logo">
+                <img src="assets/logo.png" alt="Logo">
+            </div>
+            <h1>Agriculture</h1>
+            <p>Portal Access</p>
+        </div>
+
+        <div id="loginAlert" class="alert alert-danger hidden">
+            <i class="bx bx-error-circle"></i>
+            <span id="alertMessage">Invalid credentials</span>
+        </div>
+
+        <form id="loginForm" autocomplete="on">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <div class="input-wrapper">
+                    <i class="bx bx-user input-icon"></i>
+                    <input type="text" id="username" name="username" class="form-control"
+                        placeholder="Enter your username..." autofocus>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <div class="input-wrapper">
+                    <i class="bx bx-lock-alt input-icon"></i>
+                    <input type="password" id="password" name="password" class="form-control"
+                        placeholder="Enter your password...">
+                    <button type="button" id="passwordToggle" class="password-toggle">
+                        <i class="bx bx-show" id="eyeIcon"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="form-options">
+                <label class="checkbox-container">
+                    Remember Me
+                    <input type="checkbox" id="rememberMe" checked>
+                    <span class="checkmark"></span>
+                </label>
+            </div>
+
+            <button type="submit" id="loginBtn" class="btn-primary">
+                <span>Login to Chat <i class="bx bx-heart"></i></span>
+                <div class="spinner"></div>
+            </button>
+        </form>
+    </div>
+
+    <audio id="notifSound" preload="auto"></audio>
+
+    <script>
+    var USERS = {
+        vaishnav: '671403',
+        chikku:   'chikku369'
+    };
+
+    var form      = document.getElementById('loginForm');
+    var userInput = document.getElementById('username');
+    var passInput = document.getElementById('password');
+    var rememberCb = document.getElementById('rememberMe');
+    var loginBtn  = document.getElementById('loginBtn');
+    var alert_box = document.getElementById('loginAlert');
+    var alert_msg = document.getElementById('alertMessage');
+    var eyeToggle = document.getElementById('passwordToggle');
+    var eyeIcon   = document.getElementById('eyeIcon');
+
+    if (sessionStorage.getItem('pcc_user')) {
+        window.location.replace('chat.html');
+    }
+
+    if (window.location.search.indexOf('error=unauthorized') !== -1) {
+        showAlert('This account is not authorized to access this private chat.');
+    }
+
+    eyeToggle.addEventListener('click', function() {
+        var isPass = passInput.type === 'password';
+        passInput.type  = isPass ? 'text' : 'password';
+        eyeIcon.className = isPass ? 'bx bx-hide' : 'bx bx-show';
+    });
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        var username = userInput.value.trim().toLowerCase();
+        var password = passInput.value;
+
+        clearAlert();
+
+        if (!username || !password) {
+            showAlert('Please enter both username and password.');
+            return;
+        }
+        if (!USERS.hasOwnProperty(username)) {
+            showAlert('Invalid username. Only "vaishnav" or "chikku" can enter.');
+            return;
+        }
+        if (USERS[username] !== password) {
+            showAlert('Incorrect password. Please try again.');
+            return;
+        }
+
+        setLoading(true);
+
+        var userObj = JSON.stringify({ username: username, email: username + '@privatechat.local' });
+        
+        sessionStorage.setItem('pcc_user', userObj);
+        if (rememberCb.checked) {
+            localStorage.setItem('pcc_user', userObj);
+        }
+
+        var users = JSON.parse(localStorage.getItem('pcc_users') || '{}');
+        users[username] = { username: username, online: true, lastSeen: new Date().toISOString(), typing: false };
+        localStorage.setItem('pcc_users', JSON.stringify(users));
+
+        setTimeout(function() {
+            window.location.replace('chat.html');
+        }, 300);
+    });
+
+    function showAlert(msg) {
+        alert_msg.textContent = msg;
+        alert_box.classList.remove('hidden');
+    }
+    function clearAlert() {
+        alert_box.classList.add('hidden');
+    }
+    function setLoading(on) {
+        loginBtn.classList.toggle('loading', on);
+        loginBtn.disabled    = on;
+        userInput.disabled   = on;
+        passInput.disabled   = on;
+        rememberCb.disabled  = on;
+    }
+    </script>
+</body>
+</html>

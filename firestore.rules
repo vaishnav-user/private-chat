@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Check if the user is authenticated and matches one of the two allowed emails
+    function isAuthorized() {
+      return request.auth != null && 
+        (request.auth.token.email.toLowerCase() == 'vaishnav@privatechat.local' || 
+         request.auth.token.email.toLowerCase() == 'chikku@privatechat.local');
+    }
+
+    // Messages collection rules
+    match /messages/{messageId} {
+      allow read, write: if isAuthorized();
+    }
+
+    // Users status and presence collection rules
+    match /users/{username} {
+      // Both users must be able to read each other's active presence details
+      allow read: if isAuthorized();
+      
+      // A user is only allowed to update their own document ('vaishnav' or 'chikku')
+      allow write: if isAuthorized() && 
+        request.auth.token.email.toLowerCase() == (username.toLowerCase() + '@privatechat.local');
+    }
+  }
+}
