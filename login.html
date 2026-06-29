@@ -62,6 +62,7 @@
 
     <audio id="notifSound" preload="auto"></audio>
 
+    <script src="js/firebase.js"></script>
     <script>
     var USERS = {
         vaishnav: '671403',
@@ -78,7 +79,7 @@
     var eyeToggle = document.getElementById('passwordToggle');
     var eyeIcon   = document.getElementById('eyeIcon');
 
-    if (sessionStorage.getItem('pcc_user')) {
+    if (sessionStorage.getItem('pcc_user') || localStorage.getItem('pcc_user')) {
         window.location.replace('chat.html');
     }
 
@@ -109,28 +110,46 @@
             showAlert('Invalid username. Only "vaishnav" or "chikku" can enter.');
             return;
         }
-        if (USERS[username] !== password) {
-            showAlert('Incorrect password. Please try again.');
-            return;
-        }
 
         setLoading(true);
 
-        var userObj = JSON.stringify({ username: username, email: username + '@privatechat.local' });
-        
-        sessionStorage.setItem('pcc_user', userObj);
-        if (rememberCb.checked) {
-            localStorage.setItem('pcc_user', userObj);
-        }
-
-        var users = JSON.parse(localStorage.getItem('pcc_users') || '{}');
-        users[username] = { username: username, online: true, lastSeen: new Date().toISOString(), typing: false };
-        localStorage.setItem('pcc_users', JSON.stringify(users));
-
-        setTimeout(function() {
-            window.location.replace('chat.html');
-        }, 300);
+        // Wait for Firebase module to load
+        var checkPCC = setInterval(function() {
+            if (window.PCC) {
+                clearInterval(checkPCC);
+                performFirebaseLogin(username, password);
+            }
+        }, 100);
     });
+
+    function performFirebaseLogin(username, password) {
+        var mappedEmail = username + '@privatechat.local';
+        var persistence = rememberCb.checked
+            ? window.PCC.browserLocalPersistence
+            : window.PCC.browserSessionPersistence;
+
+        window.PCC.setPersistence(window.PCC.auth, persistence)
+            .then(function() {
+                return window.PCC.signInWithEmailAndPassword(window.PCC.auth, mappedEmail, password);
+            })
+            .then(function(userCredential) {
+                var userObj = JSON.stringify({ username: username, email: mappedEmail });
+                sessionStorage.setItem('pcc_user', userObj);
+                if (rememberCb.checked) {
+                    localStorage.setItem('pcc_user', userObj);
+                }
+                window.location.replace('chat.html');
+            })
+            .catch(function(err) {
+                console.error('Firebase Login Error:', err);
+                setLoading(false);
+                var msg = 'Incorrect password or authentication failed. Please check your credentials.';
+                if (err.code === 'auth/network-request-failed') {
+                    msg = 'Network error. Please check your internet connection.';
+                }
+                showAlert(msg);
+            });
+    }
 
     function showAlert(msg) {
         alert_msg.textContent = msg;
