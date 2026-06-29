@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Private Couple Chat</title>
-    <!-- Favicon link (uses logo as fallback) -->
+    <title>Agriculture</title>
     <link rel="icon" type="image/png" href="assets/logo.png">
     <link rel="stylesheet" href="css/style.css">
     <style>
@@ -16,8 +15,6 @@
             text-align: center;
             height: 100vh;
             width: 100vw;
-            z-index: 100;
-            position: relative;
         }
         .heart-loader {
             position: relative;
@@ -57,7 +54,6 @@
             font-family: var(--font-heading);
             font-size: 1.2rem;
             font-weight: 500;
-            letter-spacing: 0.5px;
             color: white;
             opacity: 0.8;
             margin-top: 10px;
@@ -65,44 +61,18 @@
     </style>
 </head>
 <body>
-    <div class="bg-decorations" id="bgDecorations"></div>
-    
     <div class="loader-wrapper">
         <div class="heart-loader"></div>
-        <div class="loading-text">Connecting to your love...</div>
+        <div class="loading-text">Loading...</div>
     </div>
 
-    <!-- Firebase SDK & Custom Scripts -->
-    <script type="module" src="js/firebase.js"></script>
-    <script type="module">
-        import { auth, onAuthStateChanged } from './js/firebase.js';
-
-        // Check authentication state
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                // User is signed in, check if authorized
-                const email = user.email || '';
-                if (email === 'vaishnav@privatechat.local' || email === 'chikku@privatechat.local') {
-                    window.location.replace('chat.html');
-                } else {
-                    // Logged in but not authorized, redirect to login page (auth will clear it)
-                    window.location.replace('login.html?error=unauthorized');
-                }
-            } else {
-                // User is not signed in, redirect to login page
-                window.location.replace('login.html');
-            }
-        });
-
-        // Generate floating hearts background decoration
-        const container = document.getElementById('bgDecorations');
-        for (let i = 0; i < 15; i++) {
-            const heart = document.createElement('span');
-            heart.classList.add('floating-heart');
-            heart.style.left = Math.random() * 100 + 'vw';
-            heart.style.animationDelay = Math.random() * 8 + 's';
-            heart.style.animationDuration = 6 + Math.random() * 8 + 's';
-            container.appendChild(heart);
+    <script>
+        // Check if user is already logged in via sessionStorage / localStorage
+        var saved = sessionStorage.getItem('pcc_user') || localStorage.getItem('pcc_user');
+        if (saved) {
+            window.location.replace('chat.html');
+        } else {
+            window.location.replace('login.html');
         }
     </script>
 </body>
