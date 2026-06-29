@@ -194,14 +194,21 @@
             PCC.orderBy('timestamp', 'asc')
         );
 
+        // Track IDs we have already marked as read — prevents infinite write loop
+        var _markedReadIds = {};
+
         PCC.onSnapshot(msgsRef, function(snapshot) {
             var count = 0;
+            var toMarkRead = [];
+
             snapshot.forEach(function(docSnap) {
                 count++;
                 var msg = docSnap.data();
                 msg.id  = docSnap.id;
                 var existing = document.getElementById('msg-node-' + msg.id);
+
                 if (!existing) {
+                    // New message — add to DOM
                     appendMessage(msg);
                     scrollBottom();
                     if (msg.sender === PARTNER) {
@@ -209,7 +216,7 @@
                         if (Date.now() - ts < 10000) playSound();
                     }
                 } else {
-                    // Update read receipt without re-rendering
+                    // Update read receipt only (no DOM re-render)
                     if (msg.sender === ME) {
                         var rcpt = document.getElementById('rcpt-' + msg.id);
                         if (rcpt) {
@@ -220,9 +227,22 @@
                         }
                     }
                 }
+
+                // Collect partner messages that need to be marked as read (only once each)
+                if (msg.sender === PARTNER && !msg.read && !_markedReadIds[msg.id]) {
+                    toMarkRead.push(msg.id);
+                }
             });
+
             msgCount.textContent = count;
-            markRead();
+
+            // Mark unread messages as read — only if we haven't done so already
+            toMarkRead.forEach(function(id) {
+                _markedReadIds[id] = true; // Mark immediately to prevent re-entry
+                PCC.updateDoc(PCC.doc(PCC.db, 'messages', id), {
+                    read: true, readAt: PCC.serverTimestamp()
+                }).catch(function(){ delete _markedReadIds[id]; }); // Reset on failure
+            });
         });
 
         // ── Real-time partner status listener ─────────────────────────
