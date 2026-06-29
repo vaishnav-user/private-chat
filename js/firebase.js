@@ -1,322 +1,349 @@
 /**
- * firebase.js — Self-contained global module (Demo Mode)
- * Sets window.FirebaseApp with auth and db helpers.
- * No external CDN, no imports, no exports — works offline instantly.
+ * firebase.js — Real Firebase Mode
+ * Uses Firebase Firestore + Authentication for live real-time sync.
+ * Exposes window.PCC with same API as Demo Mode so chat.html and login.html work unchanged.
  */
 (function () {
     'use strict';
 
-    // ── Demo credentials (only used locally, never sent anywhere) ──────────
-    const DEMO_USERS = {
-        vaishnav: { password: '671403',   email: 'vaishnav@privatechat.local' },
-        chikku:   { password: 'chikku369', email: 'chikku@privatechat.local'  }
+    // ── Firebase Config ────────────────────────────────────────────────────
+    const FIREBASE_CONFIG = {
+        apiKey:            "AIzaSyAF9xdma_4QA-RWXmCFK3UatkAUYD-kxtg",
+        authDomain:        "agriculture-cddd2.firebaseapp.com",
+        projectId:         "agriculture-cddd2",
+        storageBucket:     "agriculture-cddd2.firebasestorage.app",
+        messagingSenderId: "924636203634",
+        appId:             "1:924636203634:web:70369630e197fa96b510eb",
+        measurementId:     "G-JH8S8J0BH9"
     };
 
-    // ── Persistence constants ──────────────────────────────────────────────
+    // ── Firebase SDK URLs (v9 compat build — works without bundler) ────────
+    const SDK_BASE = "https://www.gstatic.com/firebasejs/10.12.2";
+
+    // ── Persistence constants (mirror real Firebase names) ─────────────────
     const browserLocalPersistence   = 'LOCAL';
     const browserSessionPersistence = 'SESSION';
 
-    // ── In-memory state ───────────────────────────────────────────────────
-    let _currentUser      = null;
-    let _persistence      = browserLocalPersistence;
-    const _authListeners  = [];
-    const _fsListeners    = [];
+    // ── Internal state ─────────────────────────────────────────────────────
+    let _firebaseApp  = null;
+    let _auth         = null;
+    let _db           = null;
+    let _ready        = false;
+    let _readyCbs     = [];
+    let _persistence  = browserLocalPersistence;
+    let _FB           = null;   // real Firebase module refs
 
-    // ── Restore previous session ──────────────────────────────────────────
-    (function restoreSession() {
-        const saved = localStorage.getItem('pcc_user') || sessionStorage.getItem('pcc_user');
-        if (saved) {
-            try { _currentUser = JSON.parse(saved); } catch (_) {}
-        }
-    })();
-
-    // ── Seed localStorage on first run ────────────────────────────────────
-    if (!localStorage.getItem('pcc_messages')) {
-        localStorage.setItem('pcc_messages', JSON.stringify([]));
-    }
-    if (!localStorage.getItem('pcc_users')) {
-        localStorage.setItem('pcc_users', JSON.stringify({
-            vaishnav: { username: 'vaishnav', online: false, lastSeen: new Date().toISOString(), typing: false },
-            chikku:   { username: 'chikku',   online: false, lastSeen: new Date().toISOString(), typing: false }
-        }));
+    // Queue of PCC calls made before SDK loads
+    function _whenReady(fn) {
+        if (_ready) { fn(); } else { _readyCbs.push(fn); }
     }
 
-    // ── Cross-tab real-time sync via BroadcastChannel ─────────────────────
-    let _bc = null;
-    try {
-        _bc = new BroadcastChannel('pcc_sync');
-        _bc.onmessage = function (e) { _fireFS(e.data.col); };
-    } catch (_) {
-        window.addEventListener('storage', function (e) {
-            if (e.key === 'pcc_messages') _fireFS('messages');
-            if (e.key === 'pcc_users')    _fireFS('users');
+    // ── Dynamically load Firebase SDK ──────────────────────────────────────
+    function _loadScript(url) {
+        return new Promise(function (resolve, reject) {
+            var s = document.createElement('script');
+            s.src = url;
+            s.onload  = resolve;
+            s.onerror = reject;
+            document.head.appendChild(s);
         });
     }
 
-    function _broadcast(col) {
-        try { if (_bc) _bc.postMessage({ col: col }); } catch (_) {}
-    }
+    Promise.all([
+        _loadScript(SDK_BASE + '/firebase-app-compat.js'),
+        _loadScript(SDK_BASE + '/firebase-auth-compat.js'),
+        _loadScript(SDK_BASE + '/firebase-firestore-compat.js')
+    ]).then(function () {
+        _firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
+        _auth = firebase.auth();
+        _db   = firebase.firestore();
 
-    function _fireFS(col) {
-        _fsListeners.forEach(function (l) { if (l.col === col) l.cb(); });
-    }
+        // Enable offline persistence so the app works if connection drops
+        _db.enablePersistence({ synchronizeTabs: true }).catch(function () {});
 
-    // ── Helper: timestamp-like wrapper ────────────────────────────────────
-    function _ts(iso) {
-        if (!iso) return null;
-        return { toDate: function () { return new Date(iso); } };
-    }
+        _ready = true;
+        _readyCbs.forEach(function (fn) { fn(); });
+        _readyCbs = [];
 
-    // ═════════════════════════════════════════════════════════════════════
-    // AUTH API
-    // ═════════════════════════════════════════════════════════════════════
+        console.log('%c🌾 Agriculture — Live Firebase Mode Active', 'color:#4ade80;font-weight:bold;font-size:14px');
+    }).catch(function (err) {
+        console.error('Firebase SDK failed to load:', err);
+    });
+
+    // ══════════════════════════════════════════════════════════════════════
+    // AUTH WRAPPERS
+    // ══════════════════════════════════════════════════════════════════════
 
     const auth = {
-        get currentUser() { return _currentUser; }
+        get currentUser() { return _auth ? _auth.currentUser : null; }
     };
 
-    function setPersistence(_auth, type) {
+    function setPersistence(_a, type) {
         _persistence = type;
-        return Promise.resolve();
+        return new Promise(function (resolve) {
+            _whenReady(function () {
+                var mode = (type === browserSessionPersistence)
+                    ? firebase.auth.Auth.Persistence.SESSION
+                    : firebase.auth.Auth.Persistence.LOCAL;
+                _auth.setPersistence(mode).then(resolve).catch(resolve);
+            });
+        });
     }
 
-    function onAuthStateChanged(_auth, callback) {
-        _authListeners.push(callback);
-        // Fire immediately after all scripts have loaded
-        setTimeout(function () { callback(_currentUser); }, 100);
+    function onAuthStateChanged(_a, callback) {
+        var unsubscribe = null;
+        _whenReady(function () {
+            unsubscribe = _auth.onAuthStateChanged(callback);
+        });
+        // If SDK not ready yet, return a cancel fn that unsubscribes when ready
         return function () {
-            var idx = _authListeners.indexOf(callback);
-            if (idx > -1) _authListeners.splice(idx, 1);
+            if (unsubscribe) unsubscribe();
         };
     }
 
-    function signInWithEmailAndPassword(_auth, email, password) {
+    function signInWithEmailAndPassword(_a, email, password) {
         return new Promise(function (resolve, reject) {
-            setTimeout(function () {
-                var username = email.split('@')[0].toLowerCase();
-                var profile  = DEMO_USERS[username];
+            _whenReady(function () {
+                _auth.signInWithEmailAndPassword(email, password)
+                    .then(resolve)
+                    .catch(reject);
+            });
+        });
+    }
 
-                if (profile && profile.password === password) {
-                    _currentUser = { email: email, uid: username };
-
-                    var saved = JSON.stringify(_currentUser);
-                    if (_persistence === browserLocalPersistence) {
-                        localStorage.setItem('pcc_user', saved);
-                    } else {
-                        sessionStorage.setItem('pcc_user', saved);
-                    }
-
-                    _authListeners.forEach(function (cb) { cb(_currentUser); });
-                    resolve({ user: _currentUser });
+    function signOut(_a) {
+        return new Promise(function (resolve, reject) {
+            _whenReady(function () {
+                // Mark user offline before signing out
+                var user = _auth.currentUser;
+                if (user) {
+                    var username = user.email.split('@')[0].toLowerCase();
+                    _db.collection('users').doc(username)
+                        .set({ online: false, lastSeen: firebase.firestore.FieldValue.serverTimestamp(), typing: false }, { merge: true })
+                        .catch(function () {})
+                        .finally(function () {
+                            _auth.signOut().then(resolve).catch(reject);
+                        });
                 } else {
-                    var err  = new Error('Invalid credentials');
-                    err.code = 'auth/invalid-credential';
-                    reject(err);
+                    _auth.signOut().then(resolve).catch(reject);
                 }
-            }, 600);
+            });
         });
     }
 
-    function signOut(_auth) {
-        return new Promise(function (resolve) {
-            _currentUser = null;
-            localStorage.removeItem('pcc_user');
-            sessionStorage.removeItem('pcc_user');
-            _authListeners.forEach(function (cb) { cb(null); });
-            resolve();
-        });
-    }
-
-    // ═════════════════════════════════════════════════════════════════════
-    // FIRESTORE API
-    // ═════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════════
+    // FIRESTORE WRAPPERS  (mimic the modular v9 API surface used by chat.html)
+    // ══════════════════════════════════════════════════════════════════════
 
     const db = {};
 
-    function serverTimestamp() { return new Date().toISOString(); }
+    function serverTimestamp() {
+        return _db ? firebase.firestore.FieldValue.serverTimestamp() : new Date().toISOString();
+    }
 
-    function collection(_db, path) { return { _path: path }; }
+    function collection(_db2, path) {
+        return { _path: path, _isCollection: true };
+    }
 
-    function doc(_db, path, id) { return { _path: path, _id: id }; }
+    function doc(_db2, path, id) {
+        return { _path: path, _id: id, _isDoc: true };
+    }
 
-    function query(ref) { return ref; }
-    function orderBy() { return {}; }
-    function limit()   { return {}; }
-    function where()   { return {}; }
+    function query(ref /*, ...constraints */) {
+        // Store constraints for use in getDocs/onSnapshot
+        var constraints = Array.prototype.slice.call(arguments, 1);
+        return Object.assign({}, ref, { _constraints: constraints });
+    }
+
+    function orderBy(field, dir) {
+        return { _type: 'orderBy', field: field, dir: dir || 'asc' };
+    }
+
+    function limit(n) {
+        return { _type: 'limit', n: n };
+    }
+
+    function where(field, op, val) {
+        return { _type: 'where', field: field, op: op, val: val };
+    }
+
+    // ── Apply query constraints to a Firestore reference ──────────────────
+    function _applyConstraints(ref, constraints) {
+        var q = ref;
+        (constraints || []).forEach(function (c) {
+            if (!c || !c._type) return;
+            if (c._type === 'orderBy') q = q.orderBy(c.field, c.dir);
+            if (c._type === 'limit')   q = q.limit(c.n);
+            if (c._type === 'where')   q = q.where(c.field, c.op, c.val);
+        });
+        return q;
+    }
+
+    // ── Wrap a Firestore snapshot doc for chat.html ───────────────────────
+    function _wrapDoc(fsDoc) {
+        return {
+            id:  fsDoc.id,
+            ref: { _path: 'messages', _id: fsDoc.id, _isDoc: true },
+            data: function () {
+                var d = fsDoc.data() || {};
+                return d;
+            }
+        };
+    }
 
     function addDoc(colRef, data) {
-        return new Promise(function (resolve) {
-            var msgs = JSON.parse(localStorage.getItem('pcc_messages') || '[]');
-            var msg  = {
-                id:        'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 5),
-                text:      data.text,
-                sender:    data.sender,
-                timestamp: new Date().toISOString(),
-                read:      false,
-                readAt:    null
-            };
-            msgs.push(msg);
-            localStorage.setItem('pcc_messages', JSON.stringify(msgs));
-            _broadcast('messages');
-            _fireFS('messages');
-            resolve({ id: msg.id });
+        return new Promise(function (resolve, reject) {
+            _whenReady(function () {
+                _db.collection(colRef._path).add(data)
+                    .then(function (ref) { resolve({ id: ref.id }); })
+                    .catch(reject);
+            });
         });
     }
 
     function getDoc(docRef) {
-        return new Promise(function (resolve) {
-            var users = JSON.parse(localStorage.getItem('pcc_users') || '{}');
-            var data  = users[docRef._id];
-            resolve({
-                exists: function () { return !!data; },
-                data:   function () {
-                    if (!data) return null;
-                    return Object.assign({}, data, { lastSeen: _ts(data.lastSeen) });
-                }
+        return new Promise(function (resolve, reject) {
+            _whenReady(function () {
+                _db.collection(docRef._path).doc(docRef._id).get()
+                    .then(function (snap) {
+                        resolve({
+                            exists: function () { return snap.exists; },
+                            data:   function () { return snap.data() || null; }
+                        });
+                    })
+                    .catch(reject);
             });
         });
     }
 
-    function getDocs(_queryRef) {
-        return new Promise(function (resolve) {
-            var msgs = JSON.parse(localStorage.getItem('pcc_messages') || '[]');
-            var docs = msgs.map(function (m) {
-                return {
-                    id:  m.id,
-                    ref: { _path: 'messages', _id: m.id },
-                    data: function () { return _wrapMsg(m); }
-                };
-            });
-            resolve({
-                empty:   docs.length === 0,
-                forEach: function (cb) { docs.forEach(cb); }
+    function getDocs(queryRef) {
+        return new Promise(function (resolve, reject) {
+            _whenReady(function () {
+                var colRef = _db.collection(queryRef._path);
+                var q      = _applyConstraints(colRef, queryRef._constraints);
+                q.get().then(function (snap) {
+                    var docs = [];
+                    snap.forEach(function (d) { docs.push(_wrapDoc(d)); });
+                    resolve({
+                        empty:   docs.length === 0,
+                        forEach: function (cb) { docs.forEach(cb); }
+                    });
+                }).catch(reject);
             });
         });
     }
 
-    function setDoc(docRef, data) {
-        return new Promise(function (resolve) {
-            if (docRef._path === 'users') {
-                var users = JSON.parse(localStorage.getItem('pcc_users') || '{}');
-                var existing = users[docRef._id] || {};
-                users[docRef._id] = Object.assign({}, existing, data,
-                    { lastSeen: data.lastSeen ? new Date().toISOString() : existing.lastSeen });
-                localStorage.setItem('pcc_users', JSON.stringify(users));
-                _broadcast('users');
-                _fireFS('users');
-            }
-            resolve();
+    function setDoc(docRef, data, options) {
+        return new Promise(function (resolve, reject) {
+            _whenReady(function () {
+                var ref = _db.collection(docRef._path).doc(docRef._id);
+                var promise = (options && options.merge)
+                    ? ref.set(data, { merge: true })
+                    : ref.set(data);
+                promise.then(resolve).catch(reject);
+            });
         });
     }
 
     function updateDoc(docRef, data) {
-        return new Promise(function (resolve) {
-            if (docRef._path === 'users') {
-                var users = JSON.parse(localStorage.getItem('pcc_users') || '{}');
-                var u = users[docRef._id];
-                if (u) {
-                    users[docRef._id] = Object.assign({}, u, data,
-                        { lastSeen: data.lastSeen !== undefined ? new Date().toISOString() : u.lastSeen });
-                    localStorage.setItem('pcc_users', JSON.stringify(users));
-                    _broadcast('users');
-                    _fireFS('users');
-                }
-            } else if (docRef._path === 'messages') {
-                var msgs = JSON.parse(localStorage.getItem('pcc_messages') || '[]');
-                var idx  = msgs.findIndex(function (m) { return m.id === docRef._id; });
-                if (idx !== -1) {
-                    msgs[idx] = Object.assign({}, msgs[idx], data,
-                        { readAt: data.readAt ? new Date().toISOString() : msgs[idx].readAt });
-                    localStorage.setItem('pcc_messages', JSON.stringify(msgs));
-                    _broadcast('messages');
-                    _fireFS('messages');
-                }
-            }
-            resolve();
+        return new Promise(function (resolve, reject) {
+            _whenReady(function () {
+                _db.collection(docRef._path).doc(docRef._id).update(data)
+                    .then(resolve)
+                    .catch(function (err) {
+                        // If doc doesn't exist yet, set it instead
+                        if (err.code === 'not-found') {
+                            _db.collection(docRef._path).doc(docRef._id).set(data).then(resolve).catch(reject);
+                        } else {
+                            reject(err);
+                        }
+                    });
+            });
         });
     }
 
     function onSnapshot(ref, callback) {
-        var col = ref._id ? 'users' : (ref._path || 'messages');
+        var unsubscribe = null;
 
-        function fire() {
-            if (col === 'messages') {
-                var msgs = JSON.parse(localStorage.getItem('pcc_messages') || '[]');
-                var docs = msgs.map(function (m) {
-                    return { id: m.id, data: function () { return _wrapMsg(m); } };
-                });
-                callback({ size: docs.length, forEach: function (cb) { docs.forEach(cb); } });
+        _whenReady(function () {
+            if (ref._isDoc || ref._id) {
+                // Single document snapshot (e.g. users/vaishnav)
+                unsubscribe = _db.collection(ref._path).doc(ref._id)
+                    .onSnapshot(function (snap) {
+                        callback({
+                            exists: function () { return snap.exists; },
+                            data:   function () { return snap.data() || null; }
+                        });
+                    });
             } else {
-                var users    = JSON.parse(localStorage.getItem('pcc_users') || '{}');
-                var username = ref._id;
-                var ud       = users[username] || {};
-                callback({
-                    exists: function () { return !!users[username]; },
-                    data:   function () {
-                        return Object.assign({}, ud, { lastSeen: _ts(ud.lastSeen) });
-                    }
+                // Collection/query snapshot (e.g. messages)
+                var colRef = _db.collection(ref._path);
+                var q      = _applyConstraints(colRef, ref._constraints);
+                unsubscribe = q.onSnapshot(function (snap) {
+                    var docs = [];
+                    snap.forEach(function (d) { docs.push(_wrapDoc(d)); });
+                    callback({
+                        size:    docs.length,
+                        forEach: function (cb) { docs.forEach(cb); }
+                    });
                 });
             }
-        }
-
-        var listener = { col: col, cb: fire };
-        _fsListeners.push(listener);
-        setTimeout(fire, 100);
-
-        return function () {
-            var i = _fsListeners.indexOf(listener);
-            if (i > -1) _fsListeners.splice(i, 1);
-        };
-    }
-
-    function writeBatch(_db) {
-        var ops = [];
-        return {
-            update: function (ref, data) { ops.push(function () { return updateDoc(ref, data); }); },
-            commit: function () {
-                return Promise.all(ops.map(function (f) { return f(); })).then(function () {
-                    _broadcast('messages');
-                    _fireFS('messages');
-                });
-            }
-        };
-    }
-
-    function _wrapMsg(m) {
-        return Object.assign({}, m, {
-            timestamp: _ts(m.timestamp),
-            readAt:    _ts(m.readAt)
         });
+
+        return function () { if (unsubscribe) unsubscribe(); };
     }
 
-    // ═════════════════════════════════════════════════════════════════════
-    // EXPOSE as window.PCC (Private Couple Chat)
-    // ═════════════════════════════════════════════════════════════════════
-    window.PCC = {
-        auth:                      auth,
-        db:                        db,
-        browserLocalPersistence:   browserLocalPersistence,
-        browserSessionPersistence: browserSessionPersistence,
-        signInWithEmailAndPassword: signInWithEmailAndPassword,
-        signOut:                   signOut,
-        onAuthStateChanged:        onAuthStateChanged,
-        setPersistence:            setPersistence,
-        collection:                collection,
-        addDoc:                    addDoc,
-        doc:                       doc,
-        setDoc:                    setDoc,
-        getDoc:                    getDoc,
-        getDocs:                   getDocs,
-        updateDoc:                 updateDoc,
-        onSnapshot:                onSnapshot,
-        query:                     query,
-        orderBy:                   orderBy,
-        limit:                     limit,
-        where:                     where,
-        serverTimestamp:           serverTimestamp,
-        writeBatch:                writeBatch
-    };
+    function writeBatch(_db2) {
+        var _batch = null;
+        var ops    = [];
 
-    console.log('%c💕 Private Couple Chat — Demo Mode Active', 'color:#e91e8c;font-weight:bold;font-size:14px');
-    console.log('%c🔑 Login: vaishnav / 671403  |  chikku / chikku369', 'color:#9c27b0;font-size:12px');
+        _whenReady(function () {
+            _batch = _db.batch();
+            ops.forEach(function (op) { op(_batch); });
+        });
+
+        return {
+            update: function (docRef, data) {
+                var op = function (b) {
+                    b.update(_db.collection(docRef._path).doc(docRef._id), data);
+                };
+                if (_batch) { op(_batch); } else { ops.push(op); }
+            },
+            commit: function () {
+                return new Promise(function (resolve, reject) {
+                    _whenReady(function () {
+                        _batch.commit().then(resolve).catch(reject);
+                    });
+                });
+            }
+        };
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // EXPOSE as window.PCC  (same shape as Demo Mode)
+    // ══════════════════════════════════════════════════════════════════════
+    window.PCC = {
+        auth:                       auth,
+        db:                         db,
+        browserLocalPersistence:    browserLocalPersistence,
+        browserSessionPersistence:  browserSessionPersistence,
+        signInWithEmailAndPassword:  signInWithEmailAndPassword,
+        signOut:                    signOut,
+        onAuthStateChanged:         onAuthStateChanged,
+        setPersistence:             setPersistence,
+        collection:                 collection,
+        addDoc:                     addDoc,
+        doc:                        doc,
+        setDoc:                     setDoc,
+        getDoc:                     getDoc,
+        getDocs:                    getDocs,
+        updateDoc:                  updateDoc,
+        onSnapshot:                 onSnapshot,
+        query:                      query,
+        orderBy:                    orderBy,
+        limit:                      limit,
+        where:                      where,
+        serverTimestamp:            serverTimestamp,
+        writeBatch:                 writeBatch
+    };
 })();
