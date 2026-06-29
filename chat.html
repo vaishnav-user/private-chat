@@ -108,8 +108,6 @@
         </main>
     </div>
 
-    <audio id="notificationSound" src="assets/sounds/notification.wav" preload="auto"></audio>
-
     <script src="js/firebase.js"></script>
     <script>
     // ── Session check ────────────────────────────────────────────────────
@@ -218,10 +216,6 @@
                     // New message — add to DOM
                     appendMessage(msg);
                     scrollBottom();
-                    if (msg.sender === PARTNER) {
-                        var ts = msg.timestamp && msg.timestamp.toDate ? msg.timestamp.toDate().getTime() : 0;
-                        if (Date.now() - ts < 10000) playSound();
-                    }
                 } else {
                     // Update read receipt only (no DOM re-render)
                     if (msg.sender === ME) {
@@ -386,27 +380,7 @@
         }
     }
 
-    // ── Notification sound ────────────────────────────────────────────────
-    function playSound() {
-        var audio = $('notificationSound');
-        if (audio) { audio.currentTime = 0; audio.play().catch(synthSound); }
-        else synthSound();
-    }
-    function synthSound() {
-        try {
-            var Ctx = window.AudioContext || window.webkitAudioContext;
-            if (!Ctx) return;
-            var ctx = new Ctx(); var gain = ctx.createGain();
-            var o1  = ctx.createOscillator(); var o2 = ctx.createOscillator();
-            o1.frequency.value = 880; o2.frequency.value = 1320;
-            gain.gain.setValueAtTime(0, ctx.currentTime);
-            gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 0.05);
-            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
-            o1.connect(gain); o2.connect(gain); gain.connect(ctx.destination);
-            o1.start(); o2.start();
-            o1.stop(ctx.currentTime + 0.4); o2.stop(ctx.currentTime + 0.4);
-        } catch(_) {}
-    }
+
 
     // ── Emoji picker ──────────────────────────────────────────────────────
     function loadEmojis(cat) {
